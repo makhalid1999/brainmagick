@@ -360,3 +360,55 @@ class ChannelMerger(nn.Module):
             usage = weights.mean(dim=(0, 1)).sum()
             self._penalty = self.usage_penalty * usage
         return out
+
+class SubjectLayer(nn.Module):
+  def __init__(self, outchans, n_subjects):
+    super().__init__()
+    self.subj_layers = nn.Sequential(*[nn.Conv2d(outchans, outchans, 1, padding='same') for i in range(n_subjects)])
+
+  def forward(self, x, subj_indices):
+    for i in range(x.shape[0]):
+      x[i] = self.subj_layers[subj_indices[i] - 1](x[i].clone())
+    return x
+        
+class SpatialAttention(nn.Module):
+  def __init__(self,in_channels, out_channels, K, x, y):
+    super().__init__()
+    self.outchans = out_channels
+    self.inchans = in_channels
+    self.K = K
+    self.x = x.to(device=device)
+    self.y = y.to(device=device)
+    self.x_drop = random.uniform(0, 1)
+    self.y_drop = random.uniform(0, 1)
+    self.compute_cos_sin()           
+    # trainable parameter:
+    self.z = Parameter(torch.randn(self.outchans, K*K, dtype = torch.cfloat,device=device)/(32*32)) # each output channel has its own KxK z matrix
+    self.z.requires_grad = True
+            
+  def compute_cos_sin(self):
+    kk = torch.arange(1, self.K+1, device=device)
+    ll = torch.arange(1, self.K+1, device=device)
+    cos_fun = lambda k, l, x, y: torch.cos(2*torch.pi*(k*x + l*y))
+    sin_fun = lambda k, l, x, y: torch.sin(2*torch.pi*(k*x + l*y))
+    self.cos_matrix = torch.stack([cos_fun(kk[None,:], ll[:,None], x, y) for x, y in zip(self.x, self.y)]).reshape(self.inchans,-1).float()
+    self.sin_matrix = torch.stack([sin_fun(kk[None,:], ll[:,None], x, y) for x, y in zip(self.x, self.y)]).reshape(self.inchans,-1).float()
+
+  def forward(self, X):            
+    a = torch.matmul(self.z.real, self.cos_matrix.T) + torch.matmul(self.z.imag, self.sin_matrix.T)
+    # Question: divide this with square root of KxK? to stablize gradient as with self-attention?
+    for i in range(self.inchans):
+      distance = (self.x_drop - self.x[i])**2 + (self.y_drop - self.y[i])**2
+      if distance < 0.1:
+        a[:, i] = 0
+        
+    a = F.softmax(a, dim=1) # softmax over all input chan location for each output chan
+                                            # outchans x  inchans
+                
+            # X: N x 273 x 360            
+    X = torch.matmul(a, X) # N x outchans x 360 (time)
+                                   # matmul dim expansion logic: https://pytorch.org/docs/stable/generated/torch.matmul.html
+    return X
+
+
+
