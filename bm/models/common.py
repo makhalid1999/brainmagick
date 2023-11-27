@@ -372,7 +372,7 @@ class SubjectLayer(nn.Module):
     return x
         
 class SpatialAttention(nn.Module):
-  def __init__(self,in_channels, out_channels, K, x, y):
+  def __init__(self,in_channels, out_channels, K):
     super().__init__()
     self.outchans = out_channels
     self.inchans = in_channels
@@ -385,16 +385,27 @@ class SpatialAttention(nn.Module):
     # trainable parameter:
     self.z = Parameter(torch.randn(self.outchans, K*K, dtype = torch.cfloat,device=device)/(32*32)) # each output channel has its own KxK z matrix
     self.z.requires_grad = True
-            
-  def compute_cos_sin(self):
+
+def get_positions(self, batch):
+    meg = batch.meg
+    B, C, T = meg.shape
+    positions = torch.full((B, C, 2), self.INVALID, device=meg.device)
+    for idx in range(len(batch)):
+        recording = batch._recordings[idx]
+        rec_pos = self.get_recording_layout(recording)
+        positions[idx, :len(rec_pos)] = rec_pos.to(meg.device)
+    return positions
+
+  def forward(self, X, batch):
+    positions = self.position_getter.get_positions(batch)
+    self.x = positions[:,0]
+    self.y = positions[:,1]
     kk = torch.arange(1, self.K+1, device=device)
     ll = torch.arange(1, self.K+1, device=device)
     cos_fun = lambda k, l, x, y: torch.cos(2*torch.pi*(k*x + l*y))
     sin_fun = lambda k, l, x, y: torch.sin(2*torch.pi*(k*x + l*y))
     self.cos_matrix = torch.stack([cos_fun(kk[None,:], ll[:,None], x, y) for x, y in zip(self.x, self.y)]).reshape(self.inchans,-1).float()
     self.sin_matrix = torch.stack([sin_fun(kk[None,:], ll[:,None], x, y) for x, y in zip(self.x, self.y)]).reshape(self.inchans,-1).float()
-
-  def forward(self, X):            
     a = torch.matmul(self.z.real, self.cos_matrix.T) + torch.matmul(self.z.imag, self.sin_matrix.T)
     # Question: divide this with square root of KxK? to stablize gradient as with self-attention?
     for i in range(self.inchans):
