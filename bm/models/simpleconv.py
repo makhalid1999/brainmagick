@@ -19,7 +19,7 @@ from .common import (
 )
 
 
-class Net(nn.Module):   
+class SimpleConv(nn.Module):   
   def __init__(self, F_out, inchans, outchans, K, n_subjects=None):
     super().__init__()
     self.D2 = 320
@@ -49,10 +49,11 @@ class Net(nn.Module):
       ('glu',   nn.GLU(dim=1))
     ]))
 
-  def forward(self, x, subj_indices=None):
-    x = self.spatial_attention(x).unsqueeze(2) # add dummy dimension at the end
+  def forward(self, x, batch):
+    subjects = batch.subject_index
+    x = self.spatial_attention(x, batch).unsqueeze(2) # add dummy dimension at the end
     x = self.conv(x)
-    x = self.subject_layer(x, subj_indices)
+    x = self.subject_layer(x, subjects)
         
     for k in range(len(self.conv_blocks)):
       if k == 0:
