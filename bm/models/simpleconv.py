@@ -22,14 +22,15 @@ from .common import (
 
 
 class SimpleConv(nn.Module):   
-  def __init__(self, F_out, inchans, outchans, K, n_subjects=None):
+  def __init__(self, in_channels, out_channels, n_subjects):
     super().__init__()
+    F_out = out_channels
+    inchans = in_channels
     self.D2 = 320
-    self.outchans = outchans
-    self.spatial_attention = SpatialAttention(inchans, outchans, K)
-    self.conv = nn.Conv2d(outchans, outchans, 1, padding='same')
-    if n_subjects:
-      self.subject_layer = SubjectLayer(outchans, n_subjects)
+    self.outchans = 270
+    self.spatial_attention = SpatialAttention(inchans, 270, 32)
+    self.conv = nn.Conv2d(270, 270, 1, padding='same')
+    self.subject_layer = SubjectLayer(270, n_subjects)
     self.conv_blocks = nn.Sequential(*[self.generate_conv_block(k) for k in range(5)]) # 5 conv blocks
     self.final_convs = nn.Sequential(
       nn.Conv2d(self.D2, self.D2*2, 1),
