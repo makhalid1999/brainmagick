@@ -388,6 +388,43 @@ class SpatialAttention(nn.Module):
     # trainable parameter:
     self.z = Parameter(torch.randn(self.outchans, K*K, dtype = torch.cfloat,device=device)/(32*32)) # each output channel has its own KxK z matrix
     self.z.requires_grad = True
+      
+  def get_recording_layout(self, recording: Recording) -> torch.Tensor:
+    self._cache: tp.Dict[int, torch.Tensor] = {}
+    self._invalid_names: tp.Set[str] = set()
+    index = recording.recording_index
+    if index in self._cache:
+        return self._cache[index]
+    else:
+        info = recording.mne_info
+        layout = mne.find_layout(info)
+        indexes: tp.List[int] = []
+        valid_indexes: tp.List[int] = []
+        for meg_index, name in enumerate(info.ch_names):
+            name = name.rsplit("-", 1)[0]
+            try:
+                indexes.append(layout.names.index(name))
+            except ValueError:
+                    if name not in self._invalid_names:
+                     logger.warning(
+                        "Channels %s not in layout for recording %s of %s.",
+                        name,
+                        recording.study_name(),
+                        recording.recording_uid)
+                    self._invalid_names.add(name)
+            else:
+                valid_indexes.append(meg_index)
+
+        positions = torch.full((len(info.ch_names), 2), self.INVALID)
+        x, y = layout.pos[indexes, :2].T
+        x = (x - x.min()) / (x.max() - x.min())
+        y = (y - y.min()) / (y.max() - y.min())
+        x = torch.from_numpy(x).float()
+        y = torch.from_numpy(y).float()
+        positions[valid_indexes, 0] = x
+        positions[valid_indexes, 1] = y
+        self._cache[index] = positions
+        return positions
 
   def get_positions(self, batch):
     meg = batch.meg
