@@ -25,7 +25,7 @@ class SimpleConv(nn.Module):
   def __init__(self, in_channels, out_channels, n_subjects):
     super().__init__()
     F_out = out_channels
-    inchans = in_channels
+    inchans = in_channels['meg']
     self.D2 = 320
     self.outchans = 270
     self.spatial_attention = SpatialAttention(inchans, 270, 32)
@@ -53,6 +53,7 @@ class SimpleConv(nn.Module):
     ]))
 
   def forward(self, x, batch):
+    x = x['meg']
     subjects = batch.subject_index
     x = self.spatial_attention(x, batch).unsqueeze(2) # add dummy dimension at the end
     x = self.conv(x)
