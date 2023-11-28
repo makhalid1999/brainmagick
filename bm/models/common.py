@@ -10,6 +10,7 @@ import math
 import typing as tp
 import random
 from torch.nn.parameter import Parameter
+from torch.nn import functional as F
 
 
 import mne
@@ -415,7 +416,7 @@ class SpatialAttention(nn.Module):
             else:
                 valid_indexes.append(meg_index)
 
-        positions = torch.full((len(info.ch_names), 2), self.INVALID)
+        positions = torch.full((len(info.ch_names), 2), -0.1)
         x, y = layout.pos[indexes, :2].T
         x = (x - x.min()) / (x.max() - x.min())
         y = (y - y.min()) / (y.max() - y.min())
@@ -429,7 +430,7 @@ class SpatialAttention(nn.Module):
   def get_positions(self, batch):
     meg = batch.meg
     B, C, T = meg.shape
-    positions = torch.full((B, C, 2), self.INVALID, device=meg.device)
+    positions = torch.full((B, C, 2), -0.1, device=meg.device)
     for idx in range(len(batch)):
         recording = batch._recordings[idx]
         rec_pos = self.get_recording_layout(recording)
@@ -437,9 +438,9 @@ class SpatialAttention(nn.Module):
     return positions
 
   def forward(self, X, batch):
-    positions = self.position_getter.get_positions(batch)
-    self.x = positions[:,0]
-    self.y = positions[:,1]
+    positions = self.get_positions(batch)
+    self.x = positions[0,:,0]
+    self.y = positions[0,:,1]
     kk = torch.arange(1, self.K+1, device=device)
     ll = torch.arange(1, self.K+1, device=device)
     cos_fun = lambda k, l, x, y: torch.cos(2*torch.pi*(k*x + l*y))
