@@ -29,6 +29,9 @@ class SimpleConv(nn.Module):
     self.D2 = 320
     self.outchans = 270
     self.spatial_attention = SpatialAttention(inchans, 270, 32)
+    self.merger = ChannelMerger(
+                270, pos_dim=60, dropout=0.1,
+                usage_penalty=0, n_subjects=n_subjects, per_subject=False)
     self.conv = nn.Conv2d(270, 270, 1, padding='same')
     self.subject_layer = SubjectLayer(270, n_subjects)
     self.conv_blocks = nn.Sequential(*[self.generate_conv_block(k) for k in range(5)]) # 5 conv blocks
@@ -53,9 +56,11 @@ class SimpleConv(nn.Module):
     ]))
 
   def forward(self, x, batch):
-    x = x['meg']
+    #x = x['meg']
     subjects = batch.subject_index
-    x = self.spatial_attention(x, batch).unsqueeze(2) # add dummy dimension at the end
+    #x = self.spatial_attention(x, batch).unsqueeze(2) # add dummy dimension at the end
+    x['meg'] = self.merger(inputs["meg"], batch)
+    x = x['meg]
     x = self.conv(x)
     x = self.subject_layer(x, subjects)
         
